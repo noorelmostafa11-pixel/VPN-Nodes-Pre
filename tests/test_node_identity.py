@@ -88,6 +88,16 @@ reality_reordered = (
     "fp=chrome&flow=xtls-rprx-vision&security=reality&type=raw#two"
 )
 assert identity.dedup_key(reality) == identity.dedup_key(reality_reordered)
+# Xray's explicit RAW header type `none` passes the connection through just
+# like an omitted rawSettings field, even when the share-link name differs.
+reality_noop = reality_reordered.replace("type=raw#two", "type=tcp&headerType=none#three")
+assert identity.dedup_key(reality) == identity.dedup_key(reality_noop)
+assert identity.dedup_key(reality) == identity.dedup_key(
+    reality_noop.replace("headerType=none", "headerType=None")
+)
+assert identity.dedup_key(reality) != identity.dedup_key(
+    reality_noop.replace("headerType=none", "headerType=http")
+)
 assert identity.dedup_key(reality) != identity.dedup_key(reality.replace("fp=chrome", "fp=firefox"))
 assert identity.dedup_key(reality) != identity.dedup_key(reality.replace("sid=133a3f10a1581047", "sid=223a3f10a1581047"))
 assert identity.dedup_key(reality) != identity.dedup_key(reality.replace("flow=xtls-rprx-vision", "flow="))
