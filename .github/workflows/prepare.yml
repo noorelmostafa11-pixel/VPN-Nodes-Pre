@@ -1,0 +1,114 @@
+name: Prepare protocol candidates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5,17 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepared-protocols-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout this repository only
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Restore independent scanner state
+        run: |
+          set -euo pipefail
+          mkdir -p output/metadata
+          for name in clashxw_daily_cache.json freeproxydb_cache.json outlinekeys_daily_cache.json source_freshness.json; do
+            if [ -s "state/$name" ]; then
+              cp "state/$name" "output/metadata/$name"
+            fi
+          done
+
+      - name: Validate candidate engine
+        run: |
+          set -euo pipefail
+          python -m py_compile \
+            scripts/node_identity.py \
+            scripts/merge_and_build_tcp_pool.py \
+            scripts/xray_matrix/build_tcp_candidates.py \
+            scripts/xray_tester/vpn_pipeline_core/*.py \
+            scripts/xray_tester/vpn_pipeline_core/parsers/*.py
+          python tests/test_node_identity.py
+          python tests/test_shared_tcp_endpoint.py
+          python tests/test_gitverse_adapter.py
+          python tests/test_source_freshness.py
+          python tests/test_source_pipeline.py
+          python tests/test_kort0881_adapter.py
+          python tests/test_share_daily_adapter.py
+          python tests/test_freeproxydb_adapter.py
+          python tests/test_export_protocols.py
+          python tests/test_independence.py
+
+      - name: Collect sources and run TCP candidate checks
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          V2NODES_WORKERS: 80
+          V2NODES_RETRY_WORKERS: 20
+          V2NODES_TIMEOUT: 25
+          V2NODES_RETRY_TIMEOUT: 30
+        run: |
+          set -euo pipefail
+          python scripts/build_sources_candidates.py
+          python scripts/build_telegram_candidates.py
+          python scripts/build_v2nodes_candidates.py
+          python scripts/xray_matrix/build_tcp_candidates.py
+          test -s output/metadata/xray_candidates.json
+
+      - name: Export exactly four protocol files
+        run: |
+          set -euo pipefail
+          python scripts/export_protocols.py \
+            --input output/metadata/xray_candidates.json \
+            --output output/protocols
+          test -s output/protocols/vless.txt
+          test -s output/protocols/vmess.txt
+          test -s output/protocols/trojan.txt
+          test -s output/protocols/shadowsocks.txt
+          test "$(find output/protocols -maxdepth 1 -type f | wc -l)" -eq 4
+
+      - name: Preserve independent fallback state
+        run: |
+          set -euo pipefail
+          mkdir -p state
+          for name in clashxw_daily_cache.json freeproxydb_cache.json outlinekeys_daily_cache.json source_freshness.json; do
+            if [ -s "output/metadata/$name" ]; then
+              cp "output/metadata/$name" "state/$name"
+            fi
+          done
+
+      - name: Publish prepared protocols
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A output/protocols state
+          if git diff --cached --quiet; then
+            echo 'No candidate changes detected'
+            exit 0
+          fi
+          git commit -m 'chore: refresh prepared protocol candidates'
+          git push origin HEAD:${GITHUB_REF_NAME}

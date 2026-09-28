@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "source_repository": "noorelmostafa11-pixel/VPN-Nodes",
+  "source_commit": "2e31b6ff3288c8141f0dd0054d43a6314c2021d7",
+  "operational_dependency": false,
+  "note": "Code and sources are vendored in this repository. Scheduled runs do not read VPN-Nodes."
+}
