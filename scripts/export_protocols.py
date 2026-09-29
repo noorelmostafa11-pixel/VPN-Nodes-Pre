@@ -35,6 +35,10 @@ def export_protocols(input_path: Path, output_dir: Path) -> dict[str, int]:
         for proto in PROTOCOLS
     }
     counts: Counter[str] = Counter()
+    seen_raw: set[str] = set()
+    seen_before_fragment: set[str] = set()
+    exact_duplicates_removed = 0
+    fragment_only_duplicates_removed = 0
     try:
         for index, item in enumerate(nodes):
             if not isinstance(item, dict):
@@ -49,13 +53,24 @@ def export_protocols(input_path: Path, output_dir: Path) -> dict[str, int]:
                 raise ValueError(f"candidate #{index} URI contains a newline")
             if not uri.lower().startswith(EXPECTED_SCHEMES[protocol]):
                 raise ValueError(f"candidate #{index} protocol/URI mismatch: {protocol!r}")
+            # Keep the first original URI. This is an additional literal check
+            # after the existing candidate selection, not a parser rewrite.
+            if uri in seen_raw:
+                exact_duplicates_removed += 1
+                continue
+            seen_raw.add(uri)
+            before_fragment = uri.partition("#")[0]
+            if before_fragment in seen_before_fragment:
+                fragment_only_duplicates_removed += 1
+                continue
+            seen_before_fragment.add(before_fragment)
             handles[protocol].write(uri + "\n")
             counts[protocol] += 1
     finally:
         for handle in handles.values():
             handle.close()
 
-    if sum(counts.values()) != len(nodes):
+    if sum(counts.values()) + exact_duplicates_removed + fragment_only_duplicates_removed != len(nodes):
         raise ValueError("exported protocol count does not match candidate count")
 
     if output_dir.exists():
@@ -68,6 +83,8 @@ def export_protocols(input_path: Path, output_dir: Path) -> dict[str, int]:
         raise ValueError(f"unexpected output files: {actual!r}")
 
     print(f"SOURCE_CANDIDATES={len(nodes)}")
+    print(f"EXACT_DUPLICATES_REMOVED={exact_duplicates_removed}")
+    print(f"LITERAL_BEFORE_FRAGMENT_REMOVED={fragment_only_duplicates_removed}")
     for proto in PROTOCOLS:
         path = output_dir / f"{proto}.txt"
         print(f"{proto.upper()}={counts[proto]} bytes={path.stat().st_size}")
