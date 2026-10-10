@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "last_attempt_at": "2026-10-09T07:05:01Z",
+  "last_attempt_at": "2026-10-10T19:04:35Z",
   "last_success_at": "2026-10-09T07:05:01Z",
   "last_key_id": 41903,
   "pending": [],
@@ -116,5 +116,6 @@
     {
       "url": "ss://YWVzLTEyOC1nY206ODI3ZTg3MDc1MmU4MjBjNGVmN2NjNDA1OGMxZDBhOTk@148.72.164.235:11995#United"
     }
-  ]
+  ],
+  "last_error": "HTTPSConnectionPool(host='outlinekeys.com', port=443): Read timed out. (read timeout=20)"
 }
